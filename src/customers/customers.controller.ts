@@ -12,17 +12,16 @@ import {
   UploadedFile,
   BadRequestException,
   Req,
-  Res,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { Request, Response } from 'express';
+import { Request } from 'express';
 import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
-import { SessionGuard } from '../auth/guards/session.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('customers')
-@UseGuards(SessionGuard)
+@UseGuards(JwtAuthGuard)
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
@@ -46,7 +45,7 @@ export class CustomersController {
 
   @Post()
   async create(@Body() createCustomerDto: CreateCustomerDto, @Req() req: Request) {
-    const userId = req.cookies['session'];
+    const userId = req['user'].sub;
     return this.customersService.create(createCustomerDto, userId);
   }
 
@@ -76,7 +75,7 @@ export class CustomersController {
       throw new BadRequestException('Invalid file type. Please upload .xlsx, .xls, or .csv');
     }
 
-    const userId = req.cookies['session'];
+    const userId = req['user'].sub;
     return this.customersService.import(file, userId);
   }
 }

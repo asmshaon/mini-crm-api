@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { CustomersService } from './customers.service';
 import { CustomersController } from './customers.controller';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -10,6 +11,7 @@ import { CustomersController } from './customers.controller';
         fileSize: 5 * 1024 * 1024, // 5MB
       },
     }),
+    AuthModule,
   ],
   controllers: [CustomersController],
   providers: [CustomersService],

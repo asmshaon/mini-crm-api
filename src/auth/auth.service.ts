@@ -1,5 +1,5 @@
 import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
-import { Response } from 'express';
+import { JwtService } from '@nestjs/jwt';
 import { createClient } from '@supabase/supabase-js';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -8,14 +8,14 @@ import { RegisterDto } from './dto/register.dto';
 export class AuthService {
   private supabase: ReturnType<typeof createClient>;
 
-  constructor() {
+  constructor(private jwtService: JwtService) {
     this.supabase = createClient(
       process.env.SUPABASE_URL || '',
       process.env.SUPABASE_SERVICE_KEY || '',
     );
   }
 
-  async login(loginDto: LoginDto, res: Response) {
+  async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
     const { data: user, error } = await (this.supabase
@@ -32,19 +32,16 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    res.cookie('session', user.id, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7 * 1000, // 7 days
-      path: '/',
-    });
+    const token = this.jwtService.sign({ sub: user.id, email: user.email });
 
     const { password: _, ...userWithoutPassword } = user as any;
-    return userWithoutPassword;
+    return {
+      token,
+      user: userWithoutPassword,
+    };
   }
 
-  async register(registerDto: RegisterDto, res: Response) {
+  async register(registerDto: RegisterDto) {
     const { email, password, name } = registerDto;
 
     const { data: existingUser } = await (this.supabase
@@ -73,30 +70,24 @@ export class AuthService {
       throw new Error('Failed to create account');
     }
 
-    res.cookie('session', user.id, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7 * 1000, // 7 days
-      path: '/',
-    });
+    const token = this.jwtService.sign({ sub: user.id, email: user.email });
 
     const { password: _, ...userWithoutPassword } = user as any;
-    return userWithoutPassword;
+    return {
+      token,
+      user: userWithoutPassword,
+    };
   }
 
-  async logout(res: Response) {
-    res.clearCookie('session', {
-      path: '/',
-    });
+  logout() {
     return { message: 'Logout successful' };
   }
 
-  async getMe(sessionId: string) {
+  async getMe(userId: string) {
     const { data: user, error } = await (this.supabase
       .from('users') as any)
       .select('*')
-      .eq('id', sessionId)
+      .eq('id', userId)
       .single();
 
     if (error || !user) {
@@ -105,5 +96,14 @@ export class AuthService {
 
     const { password: _, ...userWithoutPassword } = user as any;
     return userWithoutPassword;
+  }
+
+  async verifyToken(token: string) {
+    try {
+      const payload = await this.jwtService.verifyAsync(token);
+      return payload;
+    } catch {
+      throw new UnauthorizedException('Invalid token');
+    }
   }
 }
