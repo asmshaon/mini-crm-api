@@ -7,8 +7,6 @@ async function bootstrap() {
 
   // Allow multiple origins for local dev and production
   const allowedOrigins = [
-    'http://localhost:3000',
-    'https://mini-crm-one-rouge.vercel.app',
     process.env.FRONTEND_URL,
   ].filter(Boolean);
 
