@@ -1,4 +1,5 @@
 import { IsString, IsOptional, IsEnum, IsNotEmpty } from 'class-validator';
+import { CustomerStatus } from '../../types';
 
 export class CreateCustomerDto {
   @IsString()
@@ -7,7 +8,7 @@ export class CreateCustomerDto {
 
   @IsString()
   @IsNotEmpty()
-  account_number: string;
+  accountNumber: string;
 
   @IsString()
   @IsNotEmpty()
@@ -21,9 +22,9 @@ export class CreateCustomerDto {
   @IsOptional()
   nid?: string;
 
-  @IsEnum(['active', 'inactive', 'lead'])
+  @IsEnum(CustomerStatus)
   @IsOptional()
-  status?: 'active' | 'inactive' | 'lead';
+  status?: CustomerStatus;
 
   @IsString()
   @IsOptional()

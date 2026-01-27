@@ -1,109 +1,109 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { createClient } from '@supabase/supabase-js';
-import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+} from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { LoginDto } from "./dto/login.dto";
+import { RegisterDto } from "./dto/register.dto";
+import { SupabaseService } from "../supabase/supabase.service";
+import { User, UserWithoutPassword } from "../types";
 
 @Injectable()
 export class AuthService {
-  private supabase: ReturnType<typeof createClient>;
+  constructor(
+    private jwtService: JwtService,
+    private supabase: SupabaseService,
+  ) {}
 
-  constructor(private jwtService: JwtService) {
-    this.supabase = createClient(
-      process.env.SUPABASE_URL || '',
-      process.env.SUPABASE_SERVICE_KEY || '',
-    );
-  }
-
-  async login(loginDto: LoginDto) {
+  async login(loginDto: LoginDto): Promise<{
+    token: string;
+    user: UserWithoutPassword;
+  }> {
     const { email, password } = loginDto;
 
-    const { data: user, error } = await (this.supabase
-      .from('users') as any)
-      .select('*')
-      .eq('email', email)
+    const { data: user, error } = await this.supabase.users
+      .select("*")
+      .eq("email", email)
       .single();
 
-    if (error || !user) {
-      throw new UnauthorizedException('Invalid email or password');
-    }
-
-    if (user.password !== password) {
-      throw new UnauthorizedException('Invalid email or password');
+    if (error || !user || user.password !== password) {
+      throw new UnauthorizedException("Invalid email or password");
     }
 
     const token = this.jwtService.sign({ sub: user.id, email: user.email });
 
-    const { password: _, ...userWithoutPassword } = user as any;
+    // Remove password from response
+    const { password: _, ...userWithoutPassword } = user;
     return {
       token,
       user: userWithoutPassword,
     };
   }
 
-  async register(registerDto: RegisterDto) {
+  async register(registerDto: RegisterDto): Promise<{
+    token: string;
+    user: UserWithoutPassword;
+  }> {
     const { email, password, name } = registerDto;
 
-    const { data: existingUser } = await (this.supabase
-      .from('users') as any)
-      .select('email')
-      .eq('email', email)
+    // Check if user exists
+    const { data: existingUser } = await this.supabase.users
+      .select("id")
+      .eq("email", email)
       .single();
 
     if (existingUser) {
-      throw new ConflictException('User already exists');
+      throw new ConflictException("User already exists");
     }
 
-    const newUser = {
-      email,
-      password,
-      name: name || null,
-    };
-
-    const { data: user, error } = await (this.supabase
-      .from('users') as any)
-      .insert(newUser)
-      .select()
+    // Create new user
+    const { data: user, error } = await this.supabase.users
+      .insert({
+        email,
+        password,
+        name: name || null,
+      })
+      .select("*")
       .single();
 
-    if (error || !user) {
-      throw new Error('Failed to create account');
+    if (error) {
+      throw new Error(`Failed to create user: ${error.message}`);
     }
 
     const token = this.jwtService.sign({ sub: user.id, email: user.email });
 
-    const { password: _, ...userWithoutPassword } = user as any;
+    const { password: _, ...userWithoutPassword } = user;
     return {
       token,
       user: userWithoutPassword,
     };
   }
 
-  logout() {
-    return { message: 'Logout successful' };
+  logout(): { message: string } {
+    return { message: "Logout successful" };
   }
 
-  async getMe(userId: string) {
-    const { data: user, error } = await (this.supabase
-      .from('users') as any)
-      .select('*')
-      .eq('id', userId)
+  async getMe(userId: string): Promise<UserWithoutPassword> {
+    const { data: user, error } = await this.supabase.users
+      .select("*")
+      .eq("id", userId)
       .single();
 
     if (error || !user) {
-      throw new UnauthorizedException('Invalid session');
+      throw new UnauthorizedException("Invalid session");
     }
 
-    const { password: _, ...userWithoutPassword } = user as any;
+    const { password: _, ...userWithoutPassword } = user;
     return userWithoutPassword;
   }
 
-  async verifyToken(token: string) {
+  async verifyToken(token: string): Promise<{ sub: string; email: string }> {
     try {
       const payload = await this.jwtService.verifyAsync(token);
       return payload;
     } catch {
-      throw new UnauthorizedException('Invalid token');
+      throw new UnauthorizedException("Invalid token");
     }
   }
 }
