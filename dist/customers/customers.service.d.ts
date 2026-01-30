@@ -5,6 +5,8 @@ import { Customer, PaginatedResponse } from "../types";
 export declare class CustomersService {
     private supabase;
     constructor(supabase: SupabaseService);
+    private transformCustomer;
+    private transformCustomers;
     findAll(search: string, page: number, limit: number): Promise<PaginatedResponse<Customer>>;
     findOne(id: string): Promise<{
         data: Customer;

@@ -50,6 +50,20 @@ let CustomersService = class CustomersService {
     constructor(supabase) {
         this.supabase = supabase;
     }
+    transformCustomer(data) {
+        if (!data)
+            return data;
+        const { account_number, ...rest } = data;
+        return {
+            ...rest,
+            accountNumber: account_number,
+        };
+    }
+    transformCustomers(data) {
+        if (!data)
+            return data;
+        return data.map((item) => this.transformCustomer(item));
+    }
     async findAll(search, page, limit) {
         const skip = (page - 1) * limit;
         let query = this.supabase.customers.select("*", { count: "exact" });
@@ -63,7 +77,7 @@ let CustomersService = class CustomersService {
             throw new Error(`Failed to fetch customers: ${error.message}`);
         }
         return {
-            data: data || [],
+            data: this.transformCustomers(data || []),
             pagination: {
                 page,
                 limit,
@@ -80,13 +94,22 @@ let CustomersService = class CustomersService {
         if (error || !data) {
             throw new common_1.NotFoundException("Customer not found");
         }
-        return { data };
+        return { data: this.transformCustomer(data) };
     }
     async create(createCustomerDto, userId) {
-        const { data, error } = await this.supabase.customers.insert({
-            ...createCustomerDto,
+        const insertData = {
+            name: createCustomerDto.name,
+            account_number: createCustomerDto.accountNumber,
+            phone: createCustomerDto.phone,
+            nominee: createCustomerDto.nominee,
+            nid: createCustomerDto.nid,
+            status: createCustomerDto.status,
+            notes: createCustomerDto.notes,
             created_by: userId,
-        }).select("*")
+        };
+        const { data, error } = await this.supabase.customers
+            .insert(insertData)
+            .select("*")
             .single();
         if (error) {
             if (error.code === "23505") {
@@ -94,7 +117,7 @@ let CustomersService = class CustomersService {
             }
             throw new Error(`Failed to create customer: ${error.message}`);
         }
-        return { data };
+        return { data: this.transformCustomer(data) };
     }
     async update(id, updateCustomerDto) {
         const { data: existing } = await this.supabase.customers
@@ -104,8 +127,23 @@ let CustomersService = class CustomersService {
         if (!existing) {
             throw new common_1.NotFoundException("Customer not found");
         }
+        const updateData = {};
+        if (updateCustomerDto.name !== undefined)
+            updateData.name = updateCustomerDto.name;
+        if (updateCustomerDto.accountNumber !== undefined)
+            updateData.account_number = updateCustomerDto.accountNumber;
+        if (updateCustomerDto.phone !== undefined)
+            updateData.phone = updateCustomerDto.phone;
+        if (updateCustomerDto.nominee !== undefined)
+            updateData.nominee = updateCustomerDto.nominee;
+        if (updateCustomerDto.nid !== undefined)
+            updateData.nid = updateCustomerDto.nid;
+        if (updateCustomerDto.status !== undefined)
+            updateData.status = updateCustomerDto.status;
+        if (updateCustomerDto.notes !== undefined)
+            updateData.notes = updateCustomerDto.notes;
         const { data, error } = await this.supabase.customers
-            .update(updateCustomerDto)
+            .update(updateData)
             .eq("id", id)
             .select("*")
             .single();
@@ -115,7 +153,7 @@ let CustomersService = class CustomersService {
             }
             throw new Error(`Failed to update customer: ${error.message}`);
         }
-        return { data };
+        return { data: this.transformCustomer(data) };
     }
     async remove(id) {
         const { error } = await this.supabase.customers.delete().eq("id", id);
