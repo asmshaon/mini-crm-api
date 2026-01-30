@@ -8,7 +8,7 @@ export class CreateCustomerDto {
 
   @IsString()
   @IsNotEmpty()
-  accountNumber: string;
+  account_number: string;
 
   @IsString()
   @IsNotEmpty()

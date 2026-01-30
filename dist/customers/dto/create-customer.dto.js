@@ -24,7 +24,7 @@ __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
-], CreateCustomerDto.prototype, "accountNumber", void 0);
+], CreateCustomerDto.prototype, "account_number", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),

@@ -50,20 +50,6 @@ let CustomersService = class CustomersService {
     constructor(supabase) {
         this.supabase = supabase;
     }
-    transformCustomer(data) {
-        if (!data)
-            return data;
-        const { account_number, ...rest } = data;
-        return {
-            ...rest,
-            accountNumber: account_number,
-        };
-    }
-    transformCustomers(data) {
-        if (!data)
-            return data;
-        return data.map((item) => this.transformCustomer(item));
-    }
     async findAll(search, page, limit) {
         const skip = (page - 1) * limit;
         let query = this.supabase.customers.select("*", { count: "exact" });
@@ -77,7 +63,7 @@ let CustomersService = class CustomersService {
             throw new Error(`Failed to fetch customers: ${error.message}`);
         }
         return {
-            data: this.transformCustomers(data || []),
+            data: data || [],
             pagination: {
                 page,
                 limit,
@@ -94,21 +80,14 @@ let CustomersService = class CustomersService {
         if (error || !data) {
             throw new common_1.NotFoundException("Customer not found");
         }
-        return { data: this.transformCustomer(data) };
+        return { data };
     }
     async create(createCustomerDto, userId) {
-        const insertData = {
-            name: createCustomerDto.name,
-            account_number: createCustomerDto.accountNumber,
-            phone: createCustomerDto.phone,
-            nominee: createCustomerDto.nominee,
-            nid: createCustomerDto.nid,
-            status: createCustomerDto.status,
-            notes: createCustomerDto.notes,
-            created_by: userId,
-        };
         const { data, error } = await this.supabase.customers
-            .insert(insertData)
+            .insert({
+            ...createCustomerDto,
+            created_by: userId,
+        })
             .select("*")
             .single();
         if (error) {
@@ -117,7 +96,7 @@ let CustomersService = class CustomersService {
             }
             throw new Error(`Failed to create customer: ${error.message}`);
         }
-        return { data: this.transformCustomer(data) };
+        return { data };
     }
     async update(id, updateCustomerDto) {
         const { data: existing } = await this.supabase.customers
@@ -127,23 +106,8 @@ let CustomersService = class CustomersService {
         if (!existing) {
             throw new common_1.NotFoundException("Customer not found");
         }
-        const updateData = {};
-        if (updateCustomerDto.name !== undefined)
-            updateData.name = updateCustomerDto.name;
-        if (updateCustomerDto.accountNumber !== undefined)
-            updateData.account_number = updateCustomerDto.accountNumber;
-        if (updateCustomerDto.phone !== undefined)
-            updateData.phone = updateCustomerDto.phone;
-        if (updateCustomerDto.nominee !== undefined)
-            updateData.nominee = updateCustomerDto.nominee;
-        if (updateCustomerDto.nid !== undefined)
-            updateData.nid = updateCustomerDto.nid;
-        if (updateCustomerDto.status !== undefined)
-            updateData.status = updateCustomerDto.status;
-        if (updateCustomerDto.notes !== undefined)
-            updateData.notes = updateCustomerDto.notes;
         const { data, error } = await this.supabase.customers
-            .update(updateData)
+            .update(updateCustomerDto)
             .eq("id", id)
             .select("*")
             .single();
@@ -153,7 +117,7 @@ let CustomersService = class CustomersService {
             }
             throw new Error(`Failed to update customer: ${error.message}`);
         }
-        return { data: this.transformCustomer(data) };
+        return { data };
     }
     async remove(id) {
         const { error } = await this.supabase.customers.delete().eq("id", id);
@@ -178,9 +142,9 @@ let CustomersService = class CustomersService {
             const rowNum = i + 2;
             try {
                 const name = row.name || row.Name;
-                const accountNumber = row.account_number || row.accountNumber || row["Account Number"];
+                const account_number = row.account_number || row.account_number || row["Account Number"];
                 const phone = row.phone || row.Phone;
-                if (!name || !accountNumber || !phone) {
+                if (!name || !account_number || !phone) {
                     errors.push({
                         row: rowNum,
                         error: "Missing required fields (name, account_number, phone)",
@@ -190,7 +154,7 @@ let CustomersService = class CustomersService {
                 }
                 const { error } = await this.supabase.customers.insert({
                     name: String(name),
-                    account_number: String(accountNumber),
+                    account_number: String(account_number),
                     phone: String(phone),
                     nominee: row.nominee ? String(row.nominee) : null,
                     nid: row.nid || row.NID ? String(row.nid || row.NID) : null,
@@ -200,7 +164,7 @@ let CustomersService = class CustomersService {
                 });
                 if (error) {
                     const errorMessage = error.code === "23505"
-                        ? `Account number ${accountNumber} already exists`
+                        ? `Account number ${account_number} already exists`
                         : error.message;
                     errors.push({
                         row: rowNum,
