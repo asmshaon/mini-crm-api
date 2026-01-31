@@ -29,4 +29,8 @@ export class CreateCustomerDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @IsString()
+  @IsOptional()
+  photo?: string;
 }

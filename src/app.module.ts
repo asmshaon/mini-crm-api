@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { AuthModule } from './auth/auth.module';
 import { CustomersModule } from './customers/customers.module';
 import { SupabaseModule } from './supabase/supabase.module';
 
@@ -10,7 +9,6 @@ import { SupabaseModule } from './supabase/supabase.module';
       isGlobal: true,
     }),
     SupabaseModule,
-    AuthModule,
     CustomersModule,
   ],
 })

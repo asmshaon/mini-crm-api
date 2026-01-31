@@ -5,20 +5,20 @@ import { Customer, PaginatedResponse } from "../types";
 export declare class CustomersService {
     private supabase;
     constructor(supabase: SupabaseService);
-    findAll(search: string, page: number, limit: number): Promise<PaginatedResponse<Customer>>;
-    findOne(id: string): Promise<{
+    findAll(search: string, page: number, limit: number, token: string): Promise<PaginatedResponse<Customer>>;
+    findOne(id: string, token: string): Promise<{
         data: Customer;
     }>;
-    create(createCustomerDto: CreateCustomerDto, userId: string): Promise<{
+    create(createCustomerDto: CreateCustomerDto, userId: string, token: string): Promise<{
         data: Customer;
     }>;
-    update(id: string, updateCustomerDto: UpdateCustomerDto): Promise<{
+    update(id: string, updateCustomerDto: UpdateCustomerDto, token: string): Promise<{
         data: Customer;
     }>;
-    remove(id: string): Promise<{
+    remove(id: string, token: string): Promise<{
         success: boolean;
     }>;
-    import(file: Express.Multer.File, userId: string): Promise<{
+    import(file: Express.Multer.File, userId: string, token: string): Promise<{
         success: number;
         failed: number;
         errors: Array<{
@@ -26,5 +26,9 @@ export declare class CustomersService {
             error: string;
         }>;
         total: number;
+    }>;
+    uploadPhoto(file: Express.Multer.File): Promise<{
+        url: string;
+        path: string;
     }>;
 }

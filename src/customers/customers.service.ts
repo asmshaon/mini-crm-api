@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from "@nestjs/common";
 import * as XLSX from "xlsx";
 import { CreateCustomerDto } from "./dto/create-customer.dto";
@@ -17,10 +18,12 @@ export class CustomersService {
     search: string,
     page: number,
     limit: number,
+    token: string,
   ): Promise<PaginatedResponse<Customer>> {
     const skip = (page - 1) * limit;
+    const client = this.supabase.createClientWithAuth(token);
 
-    let query = this.supabase.customers.select("*", { count: "exact" });
+    let query = client.from("customers").select("*", { count: "exact" });
 
     if (search) {
       // Use Supabase's or filter for case-insensitive search
@@ -29,7 +32,7 @@ export class CustomersService {
       );
     }
 
-    // Get paginated data
+    // Get paginated data (RLS filters by created_by automatically)
     const { data, error, count } = await query
       .order("created_at", { ascending: false })
       .range(skip, skip + limit - 1);
@@ -49,8 +52,10 @@ export class CustomersService {
     };
   }
 
-  async findOne(id: string): Promise<{ data: Customer }> {
-    const { data, error } = await this.supabase.customers
+  async findOne(id: string, token: string): Promise<{ data: Customer }> {
+    const client = this.supabase.createClientWithAuth(token);
+    const { data, error } = await client
+      .from("customers")
       .select("*")
       .eq("id", id)
       .single();
@@ -65,10 +70,13 @@ export class CustomersService {
   async create(
     createCustomerDto: CreateCustomerDto,
     userId: string,
+    token: string,
   ): Promise<{
     data: Customer;
   }> {
-    const { data, error } = await this.supabase.customers
+    const client = this.supabase.createClientWithAuth(token);
+    const { data, error } = await client
+      .from("customers")
       .insert({
         ...createCustomerDto,
         created_by: userId,
@@ -90,20 +98,13 @@ export class CustomersService {
   async update(
     id: string,
     updateCustomerDto: UpdateCustomerDto,
+    token: string,
   ): Promise<{
     data: Customer;
   }> {
-    // First check if customer exists
-    const { data: existing } = await this.supabase.customers
-      .select("id")
-      .eq("id", id)
-      .single();
-
-    if (!existing) {
-      throw new NotFoundException("Customer not found");
-    }
-
-    const { data, error } = await this.supabase.customers
+    const client = this.supabase.createClientWithAuth(token);
+    const { data, error } = await client
+      .from("customers")
       .update(updateCustomerDto)
       .eq("id", id)
       .select("*")
@@ -113,14 +114,15 @@ export class CustomersService {
       if (error.code === "23505") {
         throw new ConflictException("Account number already exists");
       }
-      throw new Error(`Failed to update customer: ${error.message}`);
+      throw new NotFoundException("Customer not found");
     }
 
     return { data };
   }
 
-  async remove(id: string): Promise<{ success: boolean }> {
-    const { error } = await this.supabase.customers.delete().eq("id", id);
+  async remove(id: string, token: string): Promise<{ success: boolean }> {
+    const client = this.supabase.createClientWithAuth(token);
+    const { error } = await client.from("customers").delete().eq("id", id);
 
     if (error) {
       throw new NotFoundException("Customer not found");
@@ -132,6 +134,7 @@ export class CustomersService {
   async import(
     file: Express.Multer.File,
     userId: string,
+    token: string,
   ): Promise<{
     success: number;
     failed: number;
@@ -142,6 +145,7 @@ export class CustomersService {
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     const jsonData = XLSX.utils.sheet_to_json(worksheet);
+    const client = this.supabase.createClientWithAuth(token);
 
     if (jsonData.length === 0) {
       throw new Error("File is empty");
@@ -170,15 +174,14 @@ export class CustomersService {
           continue;
         }
 
-        const { error } = await this.supabase.customers.insert({
+        const { error } = await client.from("customers").insert({
           name: String(name),
           account_number: String(account_number),
           phone: String(phone),
           nominee: row.nominee ? String(row.nominee) : null,
           nid: row.nid || row.NID ? String(row.nid || row.NID) : null,
           status: (row.status as CustomerStatus) || "active",
-          notes:
-            row.notes || row.Notes ? String(row.notes || row.Notes) : null,
+          notes: row.notes || row.Notes ? String(row.notes || row.Notes) : null,
           created_by: userId,
         });
 
@@ -213,6 +216,57 @@ export class CustomersService {
       failed: failedCount,
       errors,
       total: jsonData.length,
+    };
+  }
+
+  async uploadPhoto(
+    file: Express.Multer.File,
+  ): Promise<{ url: string; path: string }> {
+    // Validate file type
+    const validTypes = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+    ];
+    if (!validTypes.includes(file.mimetype)) {
+      throw new BadRequestException(
+        "Invalid file type. Please upload JPEG, PNG, GIF, or WebP images.",
+      );
+    }
+
+    // Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      throw new BadRequestException("File size exceeds 5MB limit.");
+    }
+
+    // Generate unique filename
+    const fileExt = file.originalname.split(".").pop();
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+    const filePath = `customer-photos/${fileName}`;
+
+    // Upload to Supabase Storage
+    const { error } = await this.supabase.storage
+      .from("customer-photos")
+      .upload(filePath, file.buffer, {
+        contentType: file.mimetype,
+        upsert: false,
+      });
+
+    if (error) {
+      throw new BadRequestException(`Failed to upload photo: ${error.message}`);
+    }
+
+    // Get public URL
+    const { data: urlData } = this.supabase.storage
+      .from("customer-photos")
+      .getPublicUrl(filePath);
+
+    return {
+      url: urlData.publicUrl,
+      path: filePath,
     };
   }
 }

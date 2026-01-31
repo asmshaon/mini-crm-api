@@ -7,4 +7,5 @@ export declare class CreateCustomerDto {
     nid?: string;
     status?: CustomerStatus;
     notes?: string;
+    photo?: string;
 }

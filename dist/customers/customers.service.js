@@ -50,9 +50,10 @@ let CustomersService = class CustomersService {
     constructor(supabase) {
         this.supabase = supabase;
     }
-    async findAll(search, page, limit) {
+    async findAll(search, page, limit, token) {
         const skip = (page - 1) * limit;
-        let query = this.supabase.customers.select("*", { count: "exact" });
+        const client = this.supabase.createClientWithAuth(token);
+        let query = client.from("customers").select("*", { count: "exact" });
         if (search) {
             query = query.or(`name.ilike.%${search}%,account_number.ilike.%${search}%,phone.ilike.%${search}%,nominee.ilike.%${search}%,nid.ilike.%${search}%`);
         }
@@ -72,8 +73,10 @@ let CustomersService = class CustomersService {
             },
         };
     }
-    async findOne(id) {
-        const { data, error } = await this.supabase.customers
+    async findOne(id, token) {
+        const client = this.supabase.createClientWithAuth(token);
+        const { data, error } = await client
+            .from("customers")
             .select("*")
             .eq("id", id)
             .single();
@@ -82,8 +85,10 @@ let CustomersService = class CustomersService {
         }
         return { data };
     }
-    async create(createCustomerDto, userId) {
-        const { data, error } = await this.supabase.customers
+    async create(createCustomerDto, userId, token) {
+        const client = this.supabase.createClientWithAuth(token);
+        const { data, error } = await client
+            .from("customers")
             .insert({
             ...createCustomerDto,
             created_by: userId,
@@ -98,15 +103,10 @@ let CustomersService = class CustomersService {
         }
         return { data };
     }
-    async update(id, updateCustomerDto) {
-        const { data: existing } = await this.supabase.customers
-            .select("id")
-            .eq("id", id)
-            .single();
-        if (!existing) {
-            throw new common_1.NotFoundException("Customer not found");
-        }
-        const { data, error } = await this.supabase.customers
+    async update(id, updateCustomerDto, token) {
+        const client = this.supabase.createClientWithAuth(token);
+        const { data, error } = await client
+            .from("customers")
             .update(updateCustomerDto)
             .eq("id", id)
             .select("*")
@@ -115,22 +115,24 @@ let CustomersService = class CustomersService {
             if (error.code === "23505") {
                 throw new common_1.ConflictException("Account number already exists");
             }
-            throw new Error(`Failed to update customer: ${error.message}`);
+            throw new common_1.NotFoundException("Customer not found");
         }
         return { data };
     }
-    async remove(id) {
-        const { error } = await this.supabase.customers.delete().eq("id", id);
+    async remove(id, token) {
+        const client = this.supabase.createClientWithAuth(token);
+        const { error } = await client.from("customers").delete().eq("id", id);
         if (error) {
             throw new common_1.NotFoundException("Customer not found");
         }
         return { success: true };
     }
-    async import(file, userId) {
+    async import(file, userId, token) {
         const workbook = XLSX.read(file.buffer, { type: "buffer" });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        const client = this.supabase.createClientWithAuth(token);
         if (jsonData.length === 0) {
             throw new Error("File is empty");
         }
@@ -152,7 +154,7 @@ let CustomersService = class CustomersService {
                     failedCount++;
                     continue;
                 }
-                const { error } = await this.supabase.customers.insert({
+                const { error } = await client.from("customers").insert({
                     name: String(name),
                     account_number: String(account_number),
                     phone: String(phone),
@@ -190,6 +192,41 @@ let CustomersService = class CustomersService {
             failed: failedCount,
             errors,
             total: jsonData.length,
+        };
+    }
+    async uploadPhoto(file) {
+        const validTypes = [
+            "image/jpeg",
+            "image/jpg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+        ];
+        if (!validTypes.includes(file.mimetype)) {
+            throw new common_1.BadRequestException("Invalid file type. Please upload JPEG, PNG, GIF, or WebP images.");
+        }
+        const maxSize = 5 * 1024 * 1024;
+        if (file.size > maxSize) {
+            throw new common_1.BadRequestException("File size exceeds 5MB limit.");
+        }
+        const fileExt = file.originalname.split(".").pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+        const filePath = `customer-photos/${fileName}`;
+        const { error } = await this.supabase.storage
+            .from("customer-photos")
+            .upload(filePath, file.buffer, {
+            contentType: file.mimetype,
+            upsert: false,
+        });
+        if (error) {
+            throw new common_1.BadRequestException(`Failed to upload photo: ${error.message}`);
+        }
+        const { data: urlData } = this.supabase.storage
+            .from("customer-photos")
+            .getPublicUrl(filePath);
+        return {
+            url: urlData.publicUrl,
+            path: filePath,
         };
     }
 };

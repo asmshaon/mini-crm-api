@@ -14,24 +14,37 @@ const common_1 = require("@nestjs/common");
 const supabase_js_1 = require("@supabase/supabase-js");
 let SupabaseService = class SupabaseService {
     constructor() {
-        const supabaseUrl = process.env.SUPABASE_URL;
-        const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
-        if (!supabaseUrl || !supabaseKey) {
-            throw new Error('SUPABASE_URL and SUPABASE_SERVICE_KEY must be defined');
+        this.supabaseUrl = process.env.SUPABASE_URL;
+        this.supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+        const serviceKey = process.env.SUPABASE_SERVICE_KEY;
+        if (!this.supabaseUrl || !this.supabaseAnonKey || !serviceKey) {
+            throw new Error('SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_KEY must be defined');
         }
-        this.client = (0, supabase_js_1.createClient)(supabaseUrl, supabaseKey);
+        this.serviceClient = (0, supabase_js_1.createClient)(this.supabaseUrl, serviceKey);
     }
-    get clientInstance() {
-        return this.client;
+    createClientWithAuth(token) {
+        return (0, supabase_js_1.createClient)(this.supabaseUrl, this.supabaseAnonKey, {
+            global: {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            },
+        });
+    }
+    get serviceClientInstance() {
+        return this.serviceClient;
     }
     get users() {
-        return this.client.from('users');
+        return this.serviceClient.from('users');
     }
     get customers() {
-        return this.client.from('customers');
+        return this.serviceClient.from('customers');
+    }
+    get storage() {
+        return this.serviceClient.storage;
     }
     async onModuleDestroy() {
-        await this.client.removeAllChannels();
+        await this.serviceClient.removeAllChannels();
     }
 };
 exports.SupabaseService = SupabaseService;
